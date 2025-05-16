@@ -1,0 +1,78 @@
+name: walinuxagent
+base: core24
+version: git
+summary: Microsoft Azure Linux Agent
+description: |
+  The Microsoft Azure Linux Agent (waagent) manages Linux provisioning and
+  VM interaction with the Azure Fabric Controller.
+
+grade: devel
+confinement: strict
+
+parts:
+  waagent:
+    plugin: python
+    source: .
+    build-packages:
+      - python3-virtualenv
+    override-build: |
+      virtualenv .venv
+      source .venv/bin/activate
+
+      pip install setuptools
+      pip install -r requirements.txt
+      python3 setup.py install
+
+      # Python modules.
+      mkdir -p "${CRAFT_PART_INSTALL}/lib"
+      cp -r .venv/lib "${CRAFT_PART_INSTALL}"
+
+      # Entrypoint.
+      mkdir -p "${CRAFT_PART_INSTALL}/bin"
+      cp bin/waagent "${CRAFT_PART_INSTALL}/bin/waagent"
+      sed -i '1s|^#!.*|#!/usr/bin/python3|' $CRAFT_PART_INSTALL/bin/waagent
+
+      # Configuration.
+      mkdir -p "${CRAFT_PART_INSTALL}/etc"
+      sed -i 's|^#\s*Pid\.File=.*|Pid.File=/var/lib/waagent/waagent.pid|' config/waagent.conf
+      cp config/waagent.conf "${CRAFT_PART_INSTALL}/etc/"
+
+    stage-packages:
+      - openssh-server
+      - openssl
+      - iproute2
+      - iptables
+      - util-linux
+      - parted
+      - dosfstools
+      - e2fsprogs
+      - grep
+      - sed
+
+layout:
+  /var/lib/waagent:
+    bind: $SNAP_DATA/var/lib/waagent
+  /var/log/azure:
+    bind: $SNAP_DATA/var/log/azure
+
+plugs:
+  sys-bus-vmbus-devices:
+    interface: system-files
+    write:
+      - /sys/bus/vmbus/devices
+    read:
+      - /sys/bus/vmbus/devices
+
+apps:
+  waagent:
+    command: bin/waagent -daemon -configuration-path:$SNAP/etc/waagent.conf
+    daemon: simple
+    environment:
+      PYTHONPATH: $SNAP/lib/python3.12/site-packages
+    plugs:
+      - mount-observe
+      - network
+      - network-bind
+      - network-observe
+      - removable-media
+      - sys-bus-vmbus-devices
