@@ -56,12 +56,21 @@ layout:
     bind: $SNAP_DATA/var/log/azure
 
 plugs:
+  mntctl:
+    interface: mount-control
+    mount:
+      - what: /dev/sr*
+        where: /mnt/cdrom/secure
+        type: [udf, iso9660, vfat]
+        options: [ro]
   sys-bus-vmbus-devices:
     interface: system-files
     write:
-      - /sys/bus/vmbus/devices
+      - "/sys/devices/LNXSYSTM:00"
+      - "/sys/bus/vmbus/devices"
     read:
-      - /sys/bus/vmbus/devices
+      - "/sys/devices/LNXSYSTM:00"
+      - "/sys/bus/vmbus/devices"
 
 apps:
   waagent:
@@ -70,9 +79,19 @@ apps:
     environment:
       PYTHONPATH: $SNAP/lib/python3.12/site-packages
     plugs:
+      # to communicate with the control plan
+      - sys-bus-vmbus-devices
+      # to be able to insert iptables rules
+      # TODO(gjolly): I still see denied permission when iptables is called
+      #               we could probably add the binary to the snap??
+      - firewall-control
+      # to be able to run "mount"
       - mount-observe
+      # to mount the cdrom with provisioning data
+      # TODO(gjolly): I don't think it works
+      - mntctl
+      - removable-media
+      # Not sure needed (maybe network[-observe] to run "ip")
       - network
       - network-bind
       - network-observe
-      - removable-media
-      - sys-bus-vmbus-devices
